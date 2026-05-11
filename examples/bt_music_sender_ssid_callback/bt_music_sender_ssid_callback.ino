@@ -1,65 +1,49 @@
-/*
-  Streaming of sound data with Bluetooth to other Bluetooth device.
-  We can build a list of available devices and connect to a specific one,
-  or connnect to the closest device.
-  
-  Copyright (C) 2020 Phil Schatzmann
-  This program is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-  You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
 #include "BluetoothA2DPSource.h"
-#include <math.h> 
-
-#define c3_frequency  130.81
+#include <math.h>
 
 BluetoothA2DPSource a2dp_source;
 
-// The supported audio codec in ESP32 A2DP is SBC. SBC audio stream is encoded
-// from PCM data normally formatted as 44.1kHz sampling rate, two-channel 16-bit sample data
+#define SAMPLE_RATE 44100
+#define TARGET_DEVICE "WH-1000XM6"
+
+// 危險警報 (快速 beep)
 int32_t get_data_frames(Frame *frame, int32_t frame_count) {
-    static float m_time = 0.0;
-    float m_amplitude = 10000.0;  // -32,768 to 32,767
-    float m_deltaTime = 1.0 / 44100.0;
-    float m_phase = 0.0;
-    float pi_2 = PI * 2.0;
-    // fill the channel data
-    for (int sample = 0; sample < frame_count; ++sample) {
-        float angle = pi_2 * c3_frequency * m_time + m_phase;
-        frame[sample].channel1 = m_amplitude * sin(angle);
-        frame[sample].channel2 = frame[sample].channel1;
-        m_time += m_deltaTime;
+
+  static float t = 0.0;
+
+  for (int i = 0; i < frame_count; i++) {
+
+    float phase = fmod(t, 0.3);   // 0.3秒一個週期
+
+    int16_t sample = 0;
+
+    if (phase < 0.1) {
+      sample = 14000 * sin(2 * PI * 1500 * t); // 高頻警報,一秒1500Hz
     }
 
-    return frame_count;
-}
+    frame[i].channel1 = sample;
+    frame[i].channel2 = sample;
 
-// Return true to connect, false will continue scanning: You can can use this
-// callback to build a list.
-bool isValid(const char* ssid, esp_bd_addr_t address, int rssi){
-   Serial.print("available SSID: ");
-   Serial.println(ssid);
-   return false;
+    t += 1.0 / SAMPLE_RATE;
+  }
+
+  return frame_count;
 }
 
 void setup() {
+
   Serial.begin(115200);
 
-  a2dp_source.set_ssid_callback(isValid);
-  a2dp_source.set_data_callback_in_frames(get_data_frames);
-  a2dp_source.set_volume(30);
-  a2dp_source.start();  
+  Serial.println("ESP32 Danger Alarm Test");
+  Serial.println("Connecting to WH-1000XM6...");
 
+  a2dp_source.set_data_callback_in_frames(get_data_frames);
+
+  a2dp_source.set_volume(70); //設定音量 音量範圍：0 ~ 100
+
+  a2dp_source.start(TARGET_DEVICE);
 }
 
 void loop() {
-  // to prevent watchdog in release > 1.0.6
   delay(10);
 }
